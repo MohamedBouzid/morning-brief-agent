@@ -15,10 +15,15 @@ class State(TypedDict):
     news: str
     brief: str
 
-LAT, LON = 48.8566, 2.3522
-
 async def weather_node(state: State) -> State:
     print(">>> weather_node")
+    # Get current location based on IP
+    async with httpx.AsyncClient() as client:
+        r = await client.get("http://ip-api.com/json/", timeout=10)
+        loc_data = r.json()
+        LAT, LON = loc_data['lat'], loc_data['lon']
+        print(f"Location: {loc_data.get('city', 'Unknown')}, {loc_data.get('country', 'Unknown')} (lat: {LAT}, lon: {LON})")
+    
     url = (
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={LAT}&longitude={LON}"
