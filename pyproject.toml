@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "morning-brief"
+version = "0.1.0"
+description = "Subscription-free agent that delivers a daily morning brief."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "You", email = "you@example.com"},
+]
+
+dependencies = [
+    # orchestration
+    "langgraph>=0.1.0",
+    "python-dotenv>=1.0.0",
+
+    # local LLM bridge (OpenAI-compatible)
+    "langchain-openai>=0.1.0",
+    "openai>=1.0.0",          # talks to Ollama via /v1
+    "packaging>=23.2,<26",   # keeps langchain-core happy
+    # HTTP calls (weather, news)
+    "httpx>=0.27.0",
+
+    # optional dev / formatting
+    "ruff>=0.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourname/morning-brief"
+Repository = "https://github.com/yourname/morning-brief"
+
+[project.scripts]
+brief = "brief_workflow:main"
+
+[tool.setuptools]
+py-modules = ["brief_workflow"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
