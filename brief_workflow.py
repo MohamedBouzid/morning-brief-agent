@@ -1,47 +1,33 @@
-import asyncio, datetime, os, httpx
-from dotenv import load_dotenv
-import openai
-from langgraph.graph import StateGraph, START, END
-from typing import TypedDict
+import asyncio
+import json
 import re
+import httpx
 
-load_dotenv()
-os.makedirs("reports", exist_ok=True)
+from langchain_core.tools import tool
+from langchain_ollama import ChatOllama
+from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import PromptTemplate
 
-clientOpenAi = openai.AsyncOpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+with open('config.json', 'r') as f:
+    config = json.load(f)
 
-class State(TypedDict):
-    weather: str
-    news: str
-    brief: str
-
-async def weather_node(state: State) -> State:
-    print(">>> weather_node")
-    # Get current location based on IP
+@tool
+async def weather_tool(lat: str, long: str) -> str:
+    """Get weather conditions today."""
+    print("Fetching weather...")
     async with httpx.AsyncClient() as client:
-        r = await client.get("http://ip-api.com/json/", timeout=10)
-        loc_data = r.json()
-        LAT, LON = loc_data['lat'], loc_data['lon']
-        print(f"Location: {loc_data.get('city', 'Unknown')}, {loc_data.get('country', 'Unknown')} (lat: {LAT}, lon: {LON})")
-    
-    url = (
-        f"https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LAT}&longitude={LON}"
-        f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
-        f"&timezone=auto"
-    )
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, timeout=10)
-        data = r.json()
+        resp = await client.get(
+            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={long}&daily=temperature_2m_max,temperature_2m_min"
+        )
+        data = resp.json()
+        min_t = data["daily"]["temperature_2m_min"][0]
+        max_t = data["daily"]["temperature_2m_max"][0]
+        return f"Weather in {lat},{long}: {min_t}–{max_t}°C"
 
-    tmin = int(data["daily"]["temperature_2m_min"][0])
-    tmax = int(data["daily"]["temperature_2m_max"][0])
-    rain = float(data["daily"]["precipitation_sum"][0])
-    result = f"{tmin}–{tmax}°C, {rain:.1f}mm rain"
-    return {"weather": result}
-
-async def news_node(state: State) -> State:
-    print(">>> news_node")
+@tool
+async def news_tool() -> str:
+    """Get latest news."""
+    print("Fetching news...")
     async with httpx.AsyncClient() as client:
         r = await client.get("https://www.bbc.com/news", timeout=10)
         html = r.text
@@ -52,46 +38,72 @@ async def news_node(state: State) -> State:
     para_match = re.search(r'<p[^>]*>([^<]{50,200})</p>', html)
     para = re.sub(r'<[^>]+>', '', para_match.group(1)) if para_match else ""
     result = f"{title}. {para[:150]}..."
-    return {"news": result}
+    #return {"news": result}    
+    return f"Latest news: {result}"
 
-async def reporter_node(state: State) -> State:
-    print(">>> reporter_node")
+@tool
+async def get_location_tool() -> str:
+    """Get the current location based on IP address."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get("http://ip-api.com/json/", timeout=10)
+        loc_data = r.json()
+        LAT, LON = loc_data['lat'], loc_data['lon']
+        location_str = f"Location: {loc_data.get('city', 'Unknown')}, {loc_data.get('country', 'Unknown')} (lat: {LAT}, lon: {LON})"
+        return location_str
 
-    weather = state["weather"]
-    news = state["news"]
+@tool
+async def save_to_file(data: str, filename: str) -> str:
+    """Save data to a file."""
+    try:
+        def write_file():
+            with open(filename, 'w') as f:
+                f.write(data)
+        await asyncio.to_thread(write_file)
+        return f"Data saved to {filename}"
+    except Exception as e:
+        return f"Error saving to file: {e}"
 
-    prompt = f"Morning brief:\nWeather: {weather}\nNews: {news}"
-    resp = await clientOpenAi.chat.completions.create(
-        model="llama3",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=120
-    )
-    brief = resp.choices[0].message.content
-    date = datetime.date.today().isoformat()
+TOOLS=[weather_tool, news_tool, get_location_tool, save_to_file]
 
-    with open(f"reports/{date}.md", "w") as f:
-        f.write(brief)
+llm = ChatOllama(
+    base_url=config["model"]["base_url"],
+    model=config["model"]["name"],
+    temperature=config["model"]["temperature"]
+)
 
-    print("brief written to file")
-    return {"brief": brief}
+# The agent needs a template that includes `{agent_scratchpad}`
+template = """You are an intelligent agent that can call tools.
+
+Available Tools:
+{{tools}}  # literal text
+
+User: {input}
+
+Begin!
+
+{agent_scratchpad}"""
+
+
+prompt = PromptTemplate(
+    template=template,
+    input_variables=["tools", "input", "agent_scratchpad"],
+)
+
+agent = create_tool_calling_agent(
+    llm=llm,
+    tools=TOOLS,
+    prompt=prompt,
+)
+
+agent_executor = AgentExecutor.from_agent_and_tools(
+    agent=agent,
+    tools=TOOLS,
+    verbose=True,
+    max_concurrency=10,
+)
 
 if __name__ == "__main__":
-    workflow = StateGraph(State)
-    workflow.add_node("weather", weather_node)
-    workflow.add_node("news", news_node)
-    workflow.add_node("reporter", reporter_node)
-
-    workflow.add_edge(START, "weather")
-    workflow.add_edge(START, "news")
-    workflow.add_edge("weather", "reporter")
-    workflow.add_edge("news", "reporter")
-    workflow.add_edge("reporter", END)
-
-    app = workflow.compile()
     async def main():
-        print("--- starting workflow ---")
-        result = await app.ainvoke({})
-        print("--- Workflow execution finished ---")
-        print("Report: " + result["brief"])
-
+        query = config["query"]
+        await agent_executor.ainvoke({"input": query})
     asyncio.run(main())

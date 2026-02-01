@@ -1,0 +1,8 @@
+{
+  "model": {
+    "name": "gpt-oss:20b",
+    "base_url": "http://localhost:11434/",
+    "temperature": 0.3
+  },
+  "query": "Give me the weather conditions and latest news today and save it under reports folder. The filename should be suffixed with the date time."
+}
