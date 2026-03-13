@@ -1,0 +1,31 @@
+{
+  "model": {
+    "name": "gpt-oss:20b",
+    "base_url": "http://localhost:11434/",
+    "temperature": 0.1
+  },
+  "stock_agent": {
+    "data_sources": {
+      "yfinance": true,
+      "alpha_vantage": false,
+      "polygon": false
+    },
+    "analysis": {
+      "technical_indicators": true,
+      "fundamental_analysis": true,
+      "sentiment_analysis": false,
+      "ml_models": true
+    },
+    "risk_management": {
+      "max_position_size": 0.1,
+      "stop_loss_percentage": 0.05,
+      "max_portfolio_risk": 0.2
+    },
+    "database": {
+      "type": "sqlite",
+      "path": "data/stock_data.db"
+    }
+  },
+  "query": "Analyze AAPL stock and provide buy/sell recommendations with timeframes and target prices"
+}</content>
+<parameter name="filePath">c:\Users\muham\start-up\projects\morning-brief-agent\stock_config.json
