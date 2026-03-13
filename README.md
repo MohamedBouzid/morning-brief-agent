@@ -8,7 +8,7 @@ A subscription-free AI agent that delivers personalized morning briefings with w
 - **Latest News**: Fetch breaking news from reliable sources
 - **Location Detection**: Automatically detect your location via IP
 - **File Saving**: Save briefings to organized reports with timestamps
-- **Parallel Processing**: Execute multiple tasks simultaneously for faster results
+- **Parallel Processing**: Execute multiple tasks simultaneously for faster results (Not implemented yet)
 - **Configurable**: Easy configuration through JSON config file
 - **Local LLM**: Uses Ollama for privacy and cost-free operation
 - **Async Operations**: Built with async/await for efficient I/O operations
